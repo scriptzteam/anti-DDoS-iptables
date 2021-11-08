@@ -82,7 +82,7 @@ Another common mistake is that people don't use optimized kernel settings to bet
 
 We won't cover every single kernel setting that you need to adjust in order to better mitigate DDoS with iptables. Instead, we provide a set of CentOS 7 kernel settings that we would use. Just put the below in your /etc/sysctl.conf file and apply the settings with sysctl -p.
 Anti-DDoS Kernel Settings (sysctl.conf)
-
+```
 kernel.printk = 4 4 1 7
 kernel.panic = 10
 kernel.sysrq = 0
@@ -155,7 +155,7 @@ net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.all.accept_source_route = 0
 net.ipv4.conf.all.rp_filter = 1
-
+```
 These sysctl.conf settings help to maximize the performance of your server under DDoS as well as the effectiveness of the iptables rules that we're going to provide in this guide.
 The Actual IPtables Anti-DDoS Rules
 
@@ -165,22 +165,22 @@ DDoS attacks are complex. There are many different types of DDoS and it's close 
 
 We'll start with just five simple iptables rules that will already drop many TCP-based DDoS attacks.
 Block Invalid Packets
-
+```
 iptables -t mangle -A PREROUTING -m conntrack --ctstate INVALID -j DROP
-
+```
 This rule blocks all packets that are not a SYN packet and don't belong to an established TCP connection.
 Block New Packets That Are Not SYN
-
+```
 iptables -t mangle -A PREROUTING -p tcp ! --syn -m conntrack --ctstate NEW -j DROP
-
+```
 This blocks all packets that are new (don't belong to an established connection) and don't use the SYN flag. This rule is similar to the "Block Invalid Packets" one, but we found that it catches some packets that the other one doesn't.
 Block Uncommon MSS Values
-
+```
 iptables -t mangle -A PREROUTING -p tcp -m conntrack --ctstate NEW -m tcpmss ! --mss 536:65535 -j DROP
-
+```
 The above iptables rule blocks new packets (only SYN packets can be new packets as per the two previous rules) that use a TCP MSS value that is not common. This helps to block dumb SYN floods.
 Block Packets With Bogus TCP Flags
-
+```
 iptables -t mangle -A PREROUTING -p tcp --tcp-flags FIN,SYN,RST,PSH,ACK,URG NONE -j DROP
 iptables -t mangle -A PREROUTING -p tcp --tcp-flags FIN,SYN FIN,SYN -j DROP
 iptables -t mangle -A PREROUTING -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
@@ -195,10 +195,10 @@ iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL NONE -j DROP
 iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL FIN,PSH,URG -j DROP
 iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL SYN,FIN,PSH,URG -j DROP
 iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP
-
+```
 The above ruleset blocks packets that use bogus TCP flags, ie. TCP flags that legitimate packets wouldn't use.
 Block Packets From Private Subnets (Spoofing)
-
+```
 iptables -t mangle -A PREROUTING -s 224.0.0.0/3 -j DROP
 iptables -t mangle -A PREROUTING -s 169.254.0.0/16 -j DROP
 iptables -t mangle -A PREROUTING -s 172.16.0.0/12 -j DROP
@@ -208,32 +208,32 @@ iptables -t mangle -A PREROUTING -s 10.0.0.0/8 -j DROP
 iptables -t mangle -A PREROUTING -s 0.0.0.0/8 -j DROP
 iptables -t mangle -A PREROUTING -s 240.0.0.0/5 -j DROP
 iptables -t mangle -A PREROUTING -s 127.0.0.0/8 ! -i lo -j DROP
-
+```
 These rules block spoofed packets originating from private (local) subnets. On your public network interface you usually don't want to receive packets from private source IPs. These rules assume that your loopback interface uses the 127.0.0.0/8 IP space.
 
 These five sets of rules alone already block many TCP-based DDoS attacks at very high packet rates. With the kernel settings and rules mentioned above, you'll be able to filter ACK and SYN-ACK attacks at line rate.
 Additional Rules
-
+```
 iptables -t mangle -A PREROUTING -p icmp -j DROP
-
+```
 This drops all ICMP packets. ICMP is only used to ping a host to find out if it's still alive. Because it's usually not needed and only represents another vulnerability that attackers can exploit, we block all ICMP packets to mitigate Ping of Death (ping flood), ICMP flood and ICMP fragmentation flood.
-
+```
 iptables -A INPUT -p tcp -m connlimit --connlimit-above 80 -j REJECT --reject-with tcp-reset
-
+```
 This iptables rule helps against connection attacks. It rejects connections from hosts that have more than 80 established connections. If you face any issues you should raise the limit as this could cause troubles with legitimate clients that establish a large number of TCP connections.
 
 iptables -A INPUT -p tcp -m conntrack --ctstate NEW -m limit --limit 60/s --limit-burst 20 -j ACCEPT
 iptables -A INPUT -p tcp -m conntrack --ctstate NEW -j DROP
 
 Limits the new TCP connections that a client can establish per second. This can be useful against connection attacks, but not so much against SYN floods because the usually use an endless amount of different spoofed source IPs.
-
+```
 iptables -t mangle -A PREROUTING -f -j DROP
-
+```
 This rule blocks fragmented packets. Normally you don't need those and blocking fragments will mitigate UDP fragmentation flood. But most of the time UDP fragmentation floods use a high amount of bandwidth that is likely to exhaust the capacity of your network card, which makes this rule optional and probably not the most useful one.
-
+```
 iptables -A INPUT -p tcp --tcp-flags RST RST -m limit --limit 2/s --limit-burst 2 -j ACCEPT
 iptables -A INPUT -p tcp --tcp-flags RST RST -j DROP
-
+```
 This limits incoming TCP RST packets to mitigate TCP RST floods. Effectiveness of this rule is questionable.
 Mitigating SYN Floods With SYNPROXY
 
@@ -244,11 +244,11 @@ The purpose of SYNPROXY is to check whether the host that sent the SYN packet ac
 While the iptables rules that we provided above already block most TCP-based attacks, the attack type that can still slip through them if sophisticated enough is a SYN flood. It's important to note that the performance of the rules will always be better if we find a certain pattern or signature to block, such as packet length (-m length), TOS (-m tos), TTL (-m ttl) or strings and hex values (-m string and -m u32 for the more advanced users). But in some rare cases that's not possible or at least not easy to achieve. So in these cases, you can make use of SYNPROXY.
 
 Here are iptables SYNPROXY rules that help mitigate SYN floods that bypass our other rules:
-
+```
 iptables -t raw -D PREROUTING -p tcp -m tcp --syn -j CT --notrack
 iptables -D INPUT -p tcp -m tcp -m conntrack --ctstate INVALID,UNTRACKED -j SYNPROXY --sack-perm --timestamp --wscale 7 --mss 1460
 iptables -D INPUT -m conntrack --ctstate INVALID -j DROP
-
+```
 These rules apply to all ports. If you want to use SYNPROXY only on certain TCP ports that are active (recommended - also you should block all TCP ports that are not in use using the mangle table and PREROUTING chain), you can just add --dport 80 to each of the rules if you want to use SYNPROXY on port 80 only.
 
 To verify that SYNPROXY is working, you can do watch -n1 cat /proc/net/stat/synproxy. If the values change when you establish a new TCP connection to the port you use SYNPROXY on, it works.
@@ -257,15 +257,19 @@ The Complete IPtables Anti-DDoS Rules
 If you don't want to copy & paste each single rule we discussed in this article, you can use the below ruleset for basic DDoS protection of your Linux server.
 
 ### 1: Drop invalid packets ###
+```
 /sbin/iptables -t mangle -A PREROUTING -m conntrack --ctstate INVALID -j DROP
-
+```
 ### 2: Drop TCP packets that are new and are not SYN ###
+```
 /sbin/iptables -t mangle -A PREROUTING -p tcp ! --syn -m conntrack --ctstate NEW -j DROP
-
+```
 ### 3: Drop SYN packets with suspicious MSS value ###
+```
 /sbin/iptables -t mangle -A PREROUTING -p tcp -m conntrack --ctstate NEW -m tcpmss ! --mss 536:65535 -j DROP
-
+```
 ### 4: Block packets with bogus TCP flags ###
+```
 /sbin/iptables -t mangle -A PREROUTING -p tcp --tcp-flags FIN,SYN,RST,PSH,ACK,URG NONE -j DROP
 /sbin/iptables -t mangle -A PREROUTING -p tcp --tcp-flags FIN,SYN FIN,SYN -j DROP
 /sbin/iptables -t mangle -A PREROUTING -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
@@ -280,8 +284,9 @@ If you don't want to copy & paste each single rule we discussed in this article,
 /sbin/iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL FIN,PSH,URG -j DROP
 /sbin/iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL SYN,FIN,PSH,URG -j DROP
 /sbin/iptables -t mangle -A PREROUTING -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP
-
+```
 ### 5: Block spoofed packets ###
+```
 /sbin/iptables -t mangle -A PREROUTING -s 224.0.0.0/3 -j DROP
 /sbin/iptables -t mangle -A PREROUTING -s 169.254.0.0/16 -j DROP
 /sbin/iptables -t mangle -A PREROUTING -s 172.16.0.0/12 -j DROP
@@ -291,42 +296,50 @@ If you don't want to copy & paste each single rule we discussed in this article,
 /sbin/iptables -t mangle -A PREROUTING -s 0.0.0.0/8 -j DROP
 /sbin/iptables -t mangle -A PREROUTING -s 240.0.0.0/5 -j DROP
 /sbin/iptables -t mangle -A PREROUTING -s 127.0.0.0/8 ! -i lo -j DROP
-
+```
 ### 6: Drop ICMP (you usually don't need this protocol) ###
+```
 /sbin/iptables -t mangle -A PREROUTING -p icmp -j DROP
-
+```
 ### 7: Drop fragments in all chains ###
+```
 /sbin/iptables -t mangle -A PREROUTING -f -j DROP
-
+```
 ### 8: Limit connections per source IP ###
+```
 /sbin/iptables -A INPUT -p tcp -m connlimit --connlimit-above 111 -j REJECT --reject-with tcp-reset
-
+```
 ### 9: Limit RST packets ###
+```
 /sbin/iptables -A INPUT -p tcp --tcp-flags RST RST -m limit --limit 2/s --limit-burst 2 -j ACCEPT
 /sbin/iptables -A INPUT -p tcp --tcp-flags RST RST -j DROP
-
+```
 ### 10: Limit new TCP connections per second per source IP ###
+```
 /sbin/iptables -A INPUT -p tcp -m conntrack --ctstate NEW -m limit --limit 60/s --limit-burst 20 -j ACCEPT
 /sbin/iptables -A INPUT -p tcp -m conntrack --ctstate NEW -j DROP
-
+```
 ### 11: Use SYNPROXY on all ports (disables connection limiting rule) ###
+```
 #/sbin/iptables -t raw -D PREROUTING -p tcp -m tcp --syn -j CT --notrack
 #/sbin/iptables -D INPUT -p tcp -m tcp -m conntrack --ctstate INVALID,UNTRACKED -j SYNPROXY --sack-perm --timestamp --wscale 7 --mss 1460
 #/sbin/iptables -D INPUT -m conntrack --ctstate INVALID -j DROP
-
+```
 Bonus Rules
 
 Here are some more iptables rules that are useful to increase the overall security of a Linux server:
 
 ### SSH brute-force protection ###
+```
 /sbin/iptables -A INPUT -p tcp --dport ssh -m conntrack --ctstate NEW -m recent --set
 /sbin/iptables -A INPUT -p tcp --dport ssh -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 10 -j DROP
-
+```
 ### Protection against port scanning ###
+```
 /sbin/iptables -N port-scanning
 /sbin/iptables -A port-scanning -p tcp --tcp-flags SYN,ACK,FIN,RST RST -m limit --limit 1/s --limit-burst 2 -j RETURN
 /sbin/iptables -A port-scanning -j DROP
-
+```
 Conclusion
 
 This tutorial demonstrates some of the most powerful and effective methods to stop DDoS attacks using iptables. We've successfully mitigated DDoS attacks that peaked at multiple million packets per second using these iptables rules.
